@@ -22,7 +22,7 @@ interface SupplierBase {
   admin_id?: string;
 }
 
-export interface RegisterSupplier extends SupplierBase {}
+export type RegisterSupplier = SupplierBase;
 
 export interface SupplierResponse extends SupplierBase {
   _id: string;
