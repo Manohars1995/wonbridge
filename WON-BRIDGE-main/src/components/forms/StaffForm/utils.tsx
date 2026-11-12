@@ -100,7 +100,7 @@ export const flattenStaffData = (
   const newManagerDetails: stateVals = { ...initialFormState };
 
   for (const key in initialFormState) {
-    if (initialFormState.hasOwnProperty(key)) {
+    if (Object.prototype.hasOwnProperty.call(initialFormState, key)) {
       const typedKey = key as keyof stateVals;
 
       // Handle address fields (street, city, state, pincode) which are nested in backendData

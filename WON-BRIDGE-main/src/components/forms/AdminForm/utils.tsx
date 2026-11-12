@@ -92,7 +92,7 @@ export const flattenData = (
   const newManagerDetails: stateVals = { ...initialFormState };
 
   for (const key in initialFormState) {
-    if (initialFormState.hasOwnProperty(key)) {
+    if (Object.prototype.hasOwnProperty.call(initialFormState, key)) {
       const typedKey = key as keyof stateVals;
 
       // Handle address fields (street, city, state, pincode) which are nested in backendData
@@ -110,7 +110,7 @@ export const flattenData = (
       }
       // Handle other top-level fields (e.g., full_name, email, phone, etc.)
       else if (backendData[typedKey] !== undefined) {
-        let valueToAssign = backendData[typedKey];
+        const valueToAssign = backendData[typedKey];
 
         // Format date fields to "YYYY-MM-DD" for HTML date inputs
         // if (
