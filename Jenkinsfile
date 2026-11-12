@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -9,58 +8,70 @@ pipeline {
 
     environment {
         APP_NAME = 'WON-BRIDGE'
+        APP_DIR = 'WON-BRIDGE-main'
     }
 
     stages {
-
         stage('Git Checkout') {
             steps {
                 checkout scm
-
                 echo "Successfully cloned ${APP_NAME}"
                 sh 'git log -1 --oneline'
             }
         }
 
-        stage('Project Structure') {
+        stage('Project Validation') {
             steps {
-                sh '''
-                    echo "Checking project files..."
-                    pwd
-                    ls -la
-
-                    echo "Searching package.json files..."
-                    find . -name package.json \
-                        -not -path "*/node_modules/*" \
-                        -not -path "*/.git/*"
-                '''
+                dir("${APP_DIR}") {
+                    sh '''
+                        test -f package.json
+                        test -f package-lock.json
+                        test -f vite.config.ts
+                        echo "Application structure verified."
+                    '''
+                }
             }
         }
 
         stage('Node.js Validation') {
             steps {
                 sh '''
-                    echo "Node.js version:"
                     node --version
-
-                    echo "NPM version:"
                     npm --version
-
-                    echo "Checking package.json..."
-                    find . -name package.json \
-                        -not -path "*/node_modules/*" \
-                        -not -path "*/.git/*" \
-                        -exec sh -c '
-                            echo "Checking: $1"
-                            node -e "JSON.parse(require(\\"fs\\").readFileSync(process.argv[1]))" "$1"
-                        ' _ {} \\;
                 '''
             }
         }
 
-        stage('Build and Test') {
+        stage('Install Dependencies') {
             steps {
-                echo 'Build and test stages will be configured after inspecting the project structure.'
+                dir("${APP_DIR}") {
+                    sh 'npm ci'
+                }
+            }
+        }
+
+        stage('Code Quality - ESLint') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh 'npm run lint'
+                }
+            }
+        }
+
+        stage('Production Build') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh 'npm run build'
+                }
+            }
+        }
+
+        stage('Archive Build Artifacts') {
+            steps {
+                archiveArtifacts(
+                    artifacts: 'WON-BRIDGE-main/dist/**',
+                    fingerprint: true
+                )
             }
         }
     }
@@ -69,11 +80,9 @@ pipeline {
         success {
             echo 'WON Bridge CI pipeline completed successfully.'
         }
-
         failure {
-            echo 'WON Bridge CI pipeline failed. Check the Jenkins console output.'
+            echo 'WON Bridge CI pipeline failed. Check the console output.'
         }
-
         always {
             echo 'WON Bridge pipeline execution finished.'
         }
