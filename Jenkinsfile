@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -12,6 +13,7 @@ pipeline {
     }
 
     stages {
+
         stage('Git Checkout') {
             steps {
                 checkout scm
@@ -42,15 +44,15 @@ pipeline {
             }
         }
 
-       stage('Ansible Server Validation') {
-         steps {
-           sh '''
-             ansible-playbook \
-               -i /opt/ansible/inventory/hosts \
-              /opt/ansible/playbooks/server-info.yml
-        '''
-    }
-}
+        stage('Ansible Server Validation') {
+            steps {
+                sh '''
+                    ansible-playbook \
+                        -i /opt/ansible/inventory/hosts \
+                        /opt/ansible/playbooks/server-info.yml
+                '''
+            }
+        }
 
         stage('Install Dependencies') {
             steps {
@@ -59,26 +61,37 @@ pipeline {
                 }
             }
         }
-        stage('SonarQube Code Analysis') {
-    steps {
-        dir("${APP_DIR}") {
-            script {
-                def scannerHome = tool 'SonarScanner'
 
-                withSonarQubeEnv('SonarQube') {
-                    sh """
-                        ${scannerHome}/bin/sonar-scanner \
-                            -Dsonar.projectKey=won-bridge \
-                            -Dsonar.projectName="WON Bridge" \
-                            -Dsonar.sources=src \
-                            -Dsonar.sourceEncoding=UTF-8 \
-                            -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/coverage/**"
-                    """
+        stage('SonarQube Code Analysis') {
+            steps {
+                dir("${APP_DIR}") {
+                    script {
+                        def scannerHome = tool 'SonarScanner'
+
+                        withSonarQubeEnv('SonarQube') {
+                            withCredentials([
+                                string(
+                                    credentialsId: 'sonarqube-jenkins-token',
+                                    variable: 'SONAR_TOKEN'
+                                )
+                            ]) {
+                                withEnv(["SCANNER_HOME=${scannerHome}"]) {
+                                    sh '''
+                                        "$SCANNER_HOME/bin/sonar-scanner" \
+                                            -Dsonar.projectKey=won-bridge \
+                                            -Dsonar.projectName="WON Bridge" \
+                                            -Dsonar.sources=src \
+                                            -Dsonar.sourceEncoding=UTF-8 \
+                                            -Dsonar.token="$SONAR_TOKEN" \
+                                            -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/coverage/**"
+                                    '''
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-    }
-}
 
         stage('Code Quality - ESLint') {
             steps {
@@ -110,9 +123,11 @@ pipeline {
         success {
             echo 'WON Bridge CI pipeline completed successfully.'
         }
+
         failure {
             echo 'WON Bridge CI pipeline failed. Check the console output.'
         }
+
         always {
             echo 'WON Bridge pipeline execution finished.'
         }
