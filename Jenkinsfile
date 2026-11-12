@@ -59,6 +59,26 @@ pipeline {
                 }
             }
         }
+        stage('SonarQube Code Analysis') {
+    steps {
+        dir("${APP_DIR}") {
+            script {
+                def scannerHome = tool 'SonarScanner'
+
+                withSonarQubeEnv('SonarQube') {
+                    sh """
+                        ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=won-bridge \
+                            -Dsonar.projectName="WON Bridge" \
+                            -Dsonar.sources=src \
+                            -Dsonar.sourceEncoding=UTF-8 \
+                            -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/coverage/**"
+                    """
+                }
+            }
+        }
+    }
+}
 
         stage('Code Quality - ESLint') {
             steps {
