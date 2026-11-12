@@ -1,0 +1,1 @@
+type HTMLInputEvent = React.ChangeEvent<HTMLInputElement>;

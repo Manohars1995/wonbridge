@@ -1,0 +1,22 @@
+/* calendar container */
+.custom-range .rdrCalendarWrapper {
+  background-color: transparent;
+  border-radius: 1rem; /* 16px */
+  box-shadow: none;
+}
+
+/* selected range highlight */
+.custom-range .rdrDay.rdrDayHovered .rdrDayNumber span,
+.custom-range .rdrDay.rdrInRange .rdrDayNumber span,
+.custom-range .rdrDay.rdrStartEdge .rdrDayNumber span,
+.custom-range .rdrDay.rdrEndEdge .rdrDayNumber span {
+  background-color: #3b82f6 !important; /* Tailwind blue-500 */
+  color: white !important;
+  border-radius: 0.5rem;
+}
+
+/* adjust day cell hover */
+.custom-range .rdrDay:not(.rdrDayPassive):hover .rdrDayNumber span {
+  background-color: #e0f2fe !important; /* light blue-100 */
+  color: #1d4ed8 !important; /* blue-700 */
+}
