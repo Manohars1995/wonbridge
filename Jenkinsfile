@@ -119,6 +119,20 @@ pipeline {
         }
     }
 
+stage('Docker Image Build') {
+    steps {
+        dir("${APP_DIR}") {
+            sh '''
+                docker build \
+                    -t wonbridge-frontend:${BUILD_NUMBER} \
+                    -t wonbridge-frontend:latest \
+                    .
+                docker images wonbridge-frontend
+            '''
+        }
+    }
+}
+
     post {
         success {
             echo 'WON Bridge CI pipeline completed successfully.'
