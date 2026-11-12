@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -14,6 +13,7 @@ pipeline {
 
     stages {
 
+        // Stage 1: Git Checkout
         stage('Git Checkout') {
             steps {
                 checkout scm
@@ -22,6 +22,7 @@ pipeline {
             }
         }
 
+        // Stage 2: Project Validation
         stage('Project Validation') {
             steps {
                 dir("${APP_DIR}") {
@@ -29,12 +30,14 @@ pipeline {
                         test -f package.json
                         test -f package-lock.json
                         test -f vite.config.ts
+                        test -f Dockerfile
                         echo "Application structure verified."
                     '''
                 }
             }
         }
 
+        // Stage 3: Node.js Validation
         stage('Node.js Validation') {
             steps {
                 sh '''
@@ -44,6 +47,7 @@ pipeline {
             }
         }
 
+        // Stage 4: Ansible Server Validation
         stage('Ansible Server Validation') {
             steps {
                 sh '''
@@ -54,6 +58,7 @@ pipeline {
             }
         }
 
+        // Stage 5: Install Dependencies
         stage('Install Dependencies') {
             steps {
                 dir("${APP_DIR}") {
@@ -62,6 +67,7 @@ pipeline {
             }
         }
 
+        // Stage 6: SonarQube Code Analysis
         stage('SonarQube Code Analysis') {
             steps {
                 dir("${APP_DIR}") {
@@ -93,6 +99,7 @@ pipeline {
             }
         }
 
+        // Stage 7: Code Quality
         stage('Code Quality - ESLint') {
             steps {
                 dir("${APP_DIR}") {
@@ -101,6 +108,7 @@ pipeline {
             }
         }
 
+        // Stage 8: Production Build
         stage('Production Build') {
             steps {
                 dir("${APP_DIR}") {
@@ -109,6 +117,7 @@ pipeline {
             }
         }
 
+        // Stage 9: Archive Build Artifacts
         stage('Archive Build Artifacts') {
             steps {
                 archiveArtifacts(
@@ -117,21 +126,23 @@ pipeline {
                 )
             }
         }
-    }
 
-stage('Docker Image Build') {
-    steps {
-        dir("${APP_DIR}") {
-            sh '''
-                docker build \
-                    -t wonbridge-frontend:${BUILD_NUMBER} \
-                    -t wonbridge-frontend:latest \
-                    .
-                docker images wonbridge-frontend
-            '''
+        // Stage 10: Docker Image Build
+        stage('Docker Image Build') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh '''
+                        docker build \
+                            -t wonbridge-frontend:${BUILD_NUMBER} \
+                            -t wonbridge-frontend:latest \
+                            .
+
+                        docker images wonbridge-frontend
+                    '''
+                }
+            }
         }
     }
-}
 
     post {
         success {
