@@ -25,7 +25,7 @@ RUN ls -laR
 
 RUN npm run build
 
-EXPOSE 5176
+EXPOSE 5177
 
 
 # Start the app
