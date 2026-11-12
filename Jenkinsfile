@@ -42,6 +42,16 @@ pipeline {
             }
         }
 
+       stage('Ansible Server Validation') {
+         steps {
+           sh '''
+             ansible-playbook \
+               -i /opt/ansible/inventory/hosts \
+              /opt/ansible/playbooks/server-info.yml
+        '''
+    }
+}
+
         stage('Install Dependencies') {
             steps {
                 dir("${APP_DIR}") {
