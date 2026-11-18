@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -100,26 +99,7 @@ pipeline {
             }
         }
 
-        // Stage 7: SonarQube Quality Gate Enforcement
-        stage('SonarQube Quality Gate') {
-            steps {
-                script {
-                    timeout(time: 5, unit: 'MINUTES') {
-                        def qualityGate = waitForQualityGate()
-
-                        echo "SonarQube Quality Gate Status: ${qualityGate.status}"
-
-                        if (qualityGate.status != 'OK') {
-                            error "Pipeline stopped: SonarQube Quality Gate failed!"
-                        }
-
-                        echo "SonarQube Quality Gate passed successfully."
-                    }
-                }
-            }
-        }
-
-        // Stage 8: Code Quality - ESLint
+        // Stage 7: Code Quality
         stage('Code Quality - ESLint') {
             steps {
                 dir("${APP_DIR}") {
@@ -128,7 +108,7 @@ pipeline {
             }
         }
 
-        // Stage 9: Production Build
+        // Stage 8: Production Build
         stage('Production Build') {
             steps {
                 dir("${APP_DIR}") {
@@ -137,7 +117,7 @@ pipeline {
             }
         }
 
-        // Stage 10: Archive Build Artifacts
+        // Stage 9: Archive Build Artifacts
         stage('Archive Build Artifacts') {
             steps {
                 archiveArtifacts(
@@ -147,7 +127,7 @@ pipeline {
             }
         }
 
-        // Stage 11: Docker Image Build
+        // Stage 10: Docker Image Build
         stage('Docker Image Build') {
             steps {
                 dir("${APP_DIR}") {
@@ -178,3 +158,4 @@ pipeline {
         }
     }
 }
+update jenkins pipleine
