@@ -158,4 +158,3 @@ pipeline {
         }
     }
 }
-update jenkins pipleine
