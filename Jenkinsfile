@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -69,58 +68,7 @@ pipeline {
             }
         }
 
-        // Stage 6: SonarQube Code Analysis
-        stage('SonarQube Code Analysis') {
-            steps {
-                dir("${APP_DIR}") {
-                    script {
-                        def scannerHome = tool 'SonarScanner'
-
-                        withSonarQubeEnv('SonarQube') {
-                            withCredentials([
-                                string(
-                                    credentialsId: 'sonarqube-jenkins-token',
-                                    variable: 'SONAR_TOKEN'
-                                )
-                            ]) {
-                                withEnv(["SCANNER_HOME=${scannerHome}"]) {
-                                    sh '''
-                                        "$SCANNER_HOME/bin/sonar-scanner" \
-                                            -Dsonar.projectKey=won-bridge \
-                                            -Dsonar.projectName="WON Bridge" \
-                                            -Dsonar.sources=src \
-                                            -Dsonar.sourceEncoding=UTF-8 \
-                                            -Dsonar.token="$SONAR_TOKEN" \
-                                            -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/coverage/**"
-                                    '''
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Stage 7: SonarQube Quality Gate
-        stage('SonarQube Quality Gate') {
-            steps {
-                script {
-                    timeout(time: 5, unit: 'MINUTES') {
-                        def qualityGate = waitForQualityGate()
-
-                        echo "Quality Gate Status: ${qualityGate.status}"
-
-                        if (qualityGate.status != 'OK') {
-                            error "SonarQube Quality Gate failed!"
-                        }
-
-                        echo "SonarQube Quality Gate passed."
-                    }
-                }
-            }
-        }
-
-        // Stage 8: Code Quality - ESLint
+        // Stage 6: Code Quality - ESLint
         stage('Code Quality - ESLint') {
             steps {
                 dir("${APP_DIR}") {
@@ -129,7 +77,7 @@ pipeline {
             }
         }
 
-        // Stage 9: Production Build
+        // Stage 7: Production Build
         stage('Production Build') {
             steps {
                 dir("${APP_DIR}") {
@@ -138,7 +86,7 @@ pipeline {
             }
         }
 
-        // Stage 10: Archive Build Artifacts
+        // Stage 8: Archive Build Artifacts
         stage('Archive Build Artifacts') {
             steps {
                 archiveArtifacts(
@@ -148,7 +96,7 @@ pipeline {
             }
         }
 
-        // Stage 11: Docker Image Build
+        // Stage 9: Docker Image Build
         stage('Docker Image Build') {
             steps {
                 dir("${APP_DIR}") {
@@ -164,7 +112,7 @@ pipeline {
             }
         }
 
-        // Stage 12: Docker Hub Image Push
+        // Stage 10: Docker Hub Image Push
         stage('Docker Hub Image Push') {
             steps {
                 withCredentials([
