@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -154,7 +155,7 @@ pipeline {
             }
         }
 
-        // Stage 11: Kubernetes Deployment
+        // Stage 11: Kubernetes Deployment with Automatic Rollback
         stage('Kubernetes Deployment') {
             steps {
                 script {
@@ -162,45 +163,116 @@ pipeline {
                         "KUBECONFIG=/opt/jenkins-wonbridge-kubeconfig.yaml"
                     ]) {
                         sh '''
-                            set -e
+                            set -eu
 
+                            DEPLOYMENT="deployment/${K8S_DEPLOYMENT}"
                             IMAGE="${DOCKERHUB_REPO}:${BUILD_NUMBER}"
 
                             echo "=================================="
                             echo "WON BRIDGE KUBERNETES DEPLOYMENT"
                             echo "=================================="
+
                             echo "Namespace: ${K8S_NAMESPACE}"
-                            echo "Image: $IMAGE"
+                            echo "New image: $IMAGE"
 
-                            echo "Updating Kubernetes deployment..."
+                            // Capture existing deployment image
+                            PREVIOUS_IMAGE=$(kubectl get "$DEPLOYMENT" \
+                                -n "$K8S_NAMESPACE" \
+                                -o jsonpath="{.spec.template.spec.containers[?(@.name=='${K8S_CONTAINER}')].image}")
 
-                            kubectl set image \
-                                deployment/${K8S_DEPLOYMENT} \
-                                ${K8S_CONTAINER}=$IMAGE \
-                                -n ${K8S_NAMESPACE}
+                            if [ -z "$PREVIOUS_IMAGE" ]; then
+                                echo "ERROR: Previous image not found."
+                                exit 1
+                            fi
 
-                            echo "Waiting for rollout..."
+                            echo "Previous image: $PREVIOUS_IMAGE"
 
-                            if ! kubectl rollout status \
-                                deployment/${K8S_DEPLOYMENT} \
-                                -n ${K8S_NAMESPACE} \
+                            // Automatic rollback function
+                            rollback_deployment() {
+
+                                echo "=================================="
+                                echo "AUTOMATIC ROLLBACK STARTED"
+                                echo "=================================="
+
+                                echo "Restoring image: $PREVIOUS_IMAGE"
+
+                                if ! kubectl set image "$DEPLOYMENT" \
+                                    "${K8S_CONTAINER}=$PREVIOUS_IMAGE" \
+                                    -n "$K8S_NAMESPACE"; then
+
+                                    echo "ERROR: Failed to restore previous image."
+                                    return 1
+                                fi
+
+                                echo "Waiting for rollback rollout..."
+
+                                if ! kubectl rollout status "$DEPLOYMENT" \
+                                    -n "$K8S_NAMESPACE" \
+                                    --timeout=180s; then
+
+                                    echo "ERROR: Rollback rollout failed."
+                                    return 1
+                                fi
+
+                                RESTORED_IMAGE=$(kubectl get "$DEPLOYMENT" \
+                                    -n "$K8S_NAMESPACE" \
+                                    -o jsonpath="{.spec.template.spec.containers[?(@.name=='${K8S_CONTAINER}')].image}")
+
+                                echo "Restored image: $RESTORED_IMAGE"
+
+                                if [ "$RESTORED_IMAGE" != "$PREVIOUS_IMAGE" ]; then
+                                    echo "ERROR: Previous image verification failed."
+                                    return 1
+                                fi
+
+                                echo "Checking application health after rollback..."
+
+                                for i in $(seq 1 12); do
+
+                                    if curl -fsS \
+                                        "http://127.0.0.1:${K8S_SERVICE_PORT}/" \
+                                        -o /dev/null; then
+
+                                        echo "Rollback health check passed."
+                                        return 0
+                                    fi
+
+                                    echo "Rollback health attempt $i/12"
+                                    sleep 5
+                                done
+
+                                echo "ERROR: Application unhealthy after rollback."
+                                return 1
+                            }
+
+                            // Deploy new image
+                            if [ "$PREVIOUS_IMAGE" = "$IMAGE" ]; then
+                                echo "Deployment already uses this image."
+                            else
+                                echo "Updating Kubernetes deployment..."
+
+                                kubectl set image "$DEPLOYMENT" \
+                                    "${K8S_CONTAINER}=$IMAGE" \
+                                    -n "$K8S_NAMESPACE"
+                            fi
+
+                            // Check rollout
+                            echo "Waiting for deployment rollout..."
+
+                            if ! kubectl rollout status "$DEPLOYMENT" \
+                                -n "$K8S_NAMESPACE" \
                                 --timeout=180s; then
 
-                                echo "Deployment rollout failed."
-                                echo "Starting automatic rollback..."
+                                echo "ERROR: Kubernetes rollout failed."
 
-                                kubectl rollout undo \
-                                    deployment/${K8S_DEPLOYMENT} \
-                                    -n ${K8S_NAMESPACE}
-
-                                kubectl rollout status \
-                                    deployment/${K8S_DEPLOYMENT} \
-                                    -n ${K8S_NAMESPACE} \
-                                    --timeout=180s || true
+                                if ! rollback_deployment; then
+                                    echo "CRITICAL: Automatic rollback failed."
+                                fi
 
                                 exit 1
                             fi
 
+                            // Application health check
                             echo "Checking application health..."
 
                             HEALTHY=false
@@ -208,7 +280,7 @@ pipeline {
                             for i in $(seq 1 12); do
 
                                 if curl -fsS \
-                                    http://127.0.0.1:${K8S_SERVICE_PORT}/ \
+                                    "http://127.0.0.1:${K8S_SERVICE_PORT}/" \
                                     -o /dev/null; then
 
                                     HEALTHY=true
@@ -216,38 +288,34 @@ pipeline {
                                     break
                                 fi
 
-                                echo "Health check attempt $i/12"
+                                echo "Health attempt $i/12"
                                 sleep 5
                             done
 
+                            // Rollback if application is unhealthy
                             if [ "$HEALTHY" != "true" ]; then
 
-                                echo "Application health check failed."
-                                echo "Starting automatic rollback..."
+                                echo "ERROR: Application health check failed."
 
-                                kubectl rollout undo \
-                                    deployment/${K8S_DEPLOYMENT} \
-                                    -n ${K8S_NAMESPACE}
-
-                                kubectl rollout status \
-                                    deployment/${K8S_DEPLOYMENT} \
-                                    -n ${K8S_NAMESPACE} \
-                                    --timeout=180s || true
+                                if ! rollback_deployment; then
+                                    echo "CRITICAL: Automatic rollback failed."
+                                fi
 
                                 exit 1
                             fi
 
-                            echo "Final Kubernetes deployment status:"
+                            echo "=================================="
+                            echo "FINAL DEPLOYMENT STATUS"
+                            echo "=================================="
 
-                            kubectl get deployment \
-                                ${K8S_DEPLOYMENT} \
-                                -n ${K8S_NAMESPACE}
+                            kubectl get deployment "$K8S_DEPLOYMENT" \
+                                -n "$K8S_NAMESPACE"
 
                             kubectl get pods \
-                                -n ${K8S_NAMESPACE}
+                                -n "$K8S_NAMESPACE"
 
                             kubectl get svc \
-                                -n ${K8S_NAMESPACE}
+                                -n "$K8S_NAMESPACE"
 
                             echo "WON Bridge Kubernetes deployment successful."
                         '''
