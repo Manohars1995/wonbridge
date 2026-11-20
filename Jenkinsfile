@@ -10,6 +10,10 @@ pipeline {
         APP_NAME = 'WON-BRIDGE'
         APP_DIR = 'WON-BRIDGE-main'
         DOCKERHUB_REPO = 'manohar11995/wonbridge-frontend'
+        K8S_NAMESPACE = 'wonbridge-test'
+        K8S_DEPLOYMENT = 'wonbridge-frontend'
+        K8S_CONTAINER = 'wonbridge-frontend'
+        K8S_SERVICE_PORT = '30177'
     }
 
     stages {
@@ -28,6 +32,7 @@ pipeline {
             steps {
                 dir("${APP_DIR}") {
                     sh '''
+                        set -e
                         test -f package.json
                         test -f package-lock.json
                         test -f vite.config.ts
@@ -101,6 +106,8 @@ pipeline {
             steps {
                 dir("${APP_DIR}") {
                     sh '''
+                        set -e
+
                         docker build \
                             -t wonbridge-frontend:${BUILD_NUMBER} \
                             -t wonbridge-frontend:latest \
@@ -140,46 +147,55 @@ pipeline {
 
                         docker push \
                             "$DOCKERHUB_USER/wonbridge-frontend:latest"
+
+                        echo "Docker Hub image push completed."
                     '''
                 }
             }
         }
-    }
-    
+
         // Stage 11: Kubernetes Deployment
         stage('Kubernetes Deployment') {
             steps {
                 script {
-                    withEnv(["KUBECONFIG=/opt/jenkins-wonbridge-kubeconfig.yaml"]) {
+                    withEnv([
+                        "KUBECONFIG=/opt/jenkins-wonbridge-kubeconfig.yaml"
+                    ]) {
                         sh '''
                             set -e
 
-                            NAMESPACE="wonbridge-test"
-                            DEPLOYMENT="wonbridge-frontend"
-                            CONTAINER="wonbridge-frontend"
                             IMAGE="${DOCKERHUB_REPO}:${BUILD_NUMBER}"
 
-                            echo "Deploying image: $IMAGE"
+                            echo "=================================="
+                            echo "WON BRIDGE KUBERNETES DEPLOYMENT"
+                            echo "=================================="
+                            echo "Namespace: ${K8S_NAMESPACE}"
+                            echo "Image: $IMAGE"
+
+                            echo "Updating Kubernetes deployment..."
 
                             kubectl set image \
-                                deployment/$DEPLOYMENT \
-                                $CONTAINER=$IMAGE \
-                                -n $NAMESPACE
+                                deployment/${K8S_DEPLOYMENT} \
+                                ${K8S_CONTAINER}=$IMAGE \
+                                -n ${K8S_NAMESPACE}
+
+                            echo "Waiting for rollout..."
 
                             if ! kubectl rollout status \
-                                deployment/$DEPLOYMENT \
-                                -n $NAMESPACE \
+                                deployment/${K8S_DEPLOYMENT} \
+                                -n ${K8S_NAMESPACE} \
                                 --timeout=180s; then
 
-                                echo "Deployment failed. Rolling back..."
+                                echo "Deployment rollout failed."
+                                echo "Starting automatic rollback..."
 
                                 kubectl rollout undo \
-                                    deployment/$DEPLOYMENT \
-                                    -n $NAMESPACE
+                                    deployment/${K8S_DEPLOYMENT} \
+                                    -n ${K8S_NAMESPACE}
 
                                 kubectl rollout status \
-                                    deployment/$DEPLOYMENT \
-                                    -n $NAMESPACE \
+                                    deployment/${K8S_DEPLOYMENT} \
+                                    -n ${K8S_NAMESPACE} \
                                     --timeout=180s || true
 
                                 exit 1
@@ -190,44 +206,62 @@ pipeline {
                             HEALTHY=false
 
                             for i in $(seq 1 12); do
-                                if curl -fsS http://127.0.0.1:30177/ -o /dev/null; then
+
+                                if curl -fsS \
+                                    http://127.0.0.1:${K8S_SERVICE_PORT}/ \
+                                    -o /dev/null; then
+
                                     HEALTHY=true
+                                    echo "Application health check passed."
                                     break
                                 fi
 
-                                echo "Waiting for application health... attempt $i"
+                                echo "Health check attempt $i/12"
                                 sleep 5
                             done
 
                             if [ "$HEALTHY" != "true" ]; then
-                                echo "Health check failed. Rolling back..."
+
+                                echo "Application health check failed."
+                                echo "Starting automatic rollback..."
 
                                 kubectl rollout undo \
-                                    deployment/$DEPLOYMENT \
-                                    -n $NAMESPACE
+                                    deployment/${K8S_DEPLOYMENT} \
+                                    -n ${K8S_NAMESPACE}
 
                                 kubectl rollout status \
-                                    deployment/$DEPLOYMENT \
-                                    -n $NAMESPACE \
+                                    deployment/${K8S_DEPLOYMENT} \
+                                    -n ${K8S_NAMESPACE} \
                                     --timeout=180s || true
 
                                 exit 1
                             fi
 
-                            echo "Kubernetes deployment successful!"
-                            kubectl get pods -n $NAMESPACE
-                            kubectl get svc -n $NAMESPACE
+                            echo "Final Kubernetes deployment status:"
+
+                            kubectl get deployment \
+                                ${K8S_DEPLOYMENT} \
+                                -n ${K8S_NAMESPACE}
+
+                            kubectl get pods \
+                                -n ${K8S_NAMESPACE}
+
+                            kubectl get svc \
+                                -n ${K8S_NAMESPACE}
+
+                            echo "WON Bridge Kubernetes deployment successful."
                         '''
                     }
                 }
             }
         }
-
+    }
 
     post {
         success {
             echo 'WON Bridge CI/CD pipeline completed successfully.'
-            echo 'Docker image pushed to Docker Hub.'
+            echo 'Docker image pushed and Kubernetes deployment verified.'
+            echo 'Application URL: http://175.101.46.108:30177'
         }
 
         failure {
