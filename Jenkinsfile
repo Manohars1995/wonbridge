@@ -145,6 +145,84 @@ pipeline {
             }
         }
     }
+    
+        // Stage 11: Kubernetes Deployment
+        stage('Kubernetes Deployment') {
+            steps {
+                script {
+                    withEnv(["KUBECONFIG=/opt/jenkins-wonbridge-kubeconfig.yaml"]) {
+                        sh '''
+                            set -e
+
+                            NAMESPACE="wonbridge-test"
+                            DEPLOYMENT="wonbridge-frontend"
+                            CONTAINER="wonbridge-frontend"
+                            IMAGE="${DOCKERHUB_REPO}:${BUILD_NUMBER}"
+
+                            echo "Deploying image: $IMAGE"
+
+                            kubectl set image \
+                                deployment/$DEPLOYMENT \
+                                $CONTAINER=$IMAGE \
+                                -n $NAMESPACE
+
+                            if ! kubectl rollout status \
+                                deployment/$DEPLOYMENT \
+                                -n $NAMESPACE \
+                                --timeout=180s; then
+
+                                echo "Deployment failed. Rolling back..."
+
+                                kubectl rollout undo \
+                                    deployment/$DEPLOYMENT \
+                                    -n $NAMESPACE
+
+                                kubectl rollout status \
+                                    deployment/$DEPLOYMENT \
+                                    -n $NAMESPACE \
+                                    --timeout=180s || true
+
+                                exit 1
+                            fi
+
+                            echo "Checking application health..."
+
+                            HEALTHY=false
+
+                            for i in $(seq 1 12); do
+                                if curl -fsS http://127.0.0.1:30177/ -o /dev/null; then
+                                    HEALTHY=true
+                                    break
+                                fi
+
+                                echo "Waiting for application health... attempt $i"
+                                sleep 5
+                            done
+
+                            if [ "$HEALTHY" != "true" ]; then
+                                echo "Health check failed. Rolling back..."
+
+                                kubectl rollout undo \
+                                    deployment/$DEPLOYMENT \
+                                    -n $NAMESPACE
+
+                                kubectl rollout status \
+                                    deployment/$DEPLOYMENT \
+                                    -n $NAMESPACE \
+                                    --timeout=180s || true
+
+                                exit 1
+                            fi
+
+                            echo "Kubernetes deployment successful!"
+                            kubectl get pods -n $NAMESPACE
+                            kubectl get svc -n $NAMESPACE
+                        '''
+                    }
+                }
+            }
+        }
+
 
     post {
         success {
